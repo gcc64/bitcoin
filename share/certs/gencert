@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+## gencert.cmd: used to generate self-signed private certificates
+## so that SSL can be used locally by other programs
+## for secure argument passing to bitcoin...
+##
+## NOTE: WHEN PROMPTED, CHOOSE A FQDN THAT YOU WILL BE REFERNCING IN YOUR URL!
+##
+## Example:       https://localhost
+## FQDN would be: localhost
+##
+## This work is free software; you can redistribute it and/or modify it
+## under the terms of the GNU Lesser General Public License as published
+## by the Free Software Foundation; either version 2.1 of the License,
+## or (at your option) any later version.
+##
+## This work is distributed in the hope that it will be useful,
+## but without any warranty; without even the implied warranty
+## of merchantability or fitness for a particular purpose.
+## See the GNU Lesser General Public License for more details.
+## You should have received a copy of the GNU Lesser General Public License
+## along with this library; if not, write to the Free Software Foundation, Inc.,
+## 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+##
+
+DOWNLOADS_URL=http://slproweb.com/products/Win32OpenSSL.html
+DATA_DIR=~/.bitcoin/
+PRIVATE_KEY_FILE=server.pem
+CERT_CHAIN_FILE=server.cert
+RSA_KEY_LENGTH=2048
+LIFETIME_YEARS=10
+let LIFETIME_DAYS=365*$LIFETIME_YEARS
+
+##echo "LIFETIME_YEARS=$LIFETIME_YEARS LIFETIME_DAYS=$LIFETIME_DAYS"
+
+if [ -n "$1" ]; then
+   DATA_DIR=$1
+fi
+if [ -n "$2" ]; then
+   CERT_CHAIN_FILE=$2
+fi
+if [ -n "$3" ]; then
+   PRIVATE_KEY_FILE=$3
+fi
+
+if !(openssl version 2>/dev/null |grep OpenSSL >/dev/null); then
+   echo "This script requires that OpenSSL be installed;"
+   echo "also be sure to include the install directory of OpenSSL"
+   echo "to your \"PATH\" variable (Control Panel, System..."
+   echo "Advanced System Settings, Environment Variables, System Variables...)"
+   echo ""
+   echo "After editing your system's PATH variable you will need"
+   echo "to start a new "Command Prompt" session or reboot..."
+   echo ""
+
+   LAUNCH=""
+   while [[ "$LAUNCH" != "Y" && "$LAUNCH"!="N" ]]; do
+         read -p "Do you want me to open the web page for OpenSSL downloads? ([Y]/N)" \
+              LAUNCH
+         LAUNCH=$(echo "$LAUNCH"|tr '[:lower:]' '[:upper:]')
+   done # while "$LAUNCH" != "Y" && "$LAUNCH"!="N"
+   if [ "$LAUNCH" == "Y" ]; then
+      xdg-open $DOWNLOADS_URL
+   fi
+
+   exit
+fi # !(openssl version 2>/dev/null |grep OpenSSL >/dev/null)
+
+if [ ! -d "$DATA_DIR" ]; then
+   echo "Bitcoin install directory \"$DATA_DIR\" does not exist;"
+   echo "terminating..."
+   exit
+fi
+
+cd "$DATA_DIR"
+
+if [ -e "$PRIVATE_KEY_FILE" ]; then
+   OVERWRITE=""
+   while [[ "$OVERWRITE" != "Y" && "$OVERWRITE" != "N" ]]; do
+         read -p "\"$PRIVATE_KEY_FILE\" already exists; overwrite? (Y/[N])" \
+              OVERWRITE
+         OVERWRITE=$(echo "$OVERWRITE"|tr '[:lower:]' '[:upper:]')
+   done # while "$OVERWRITE" != "Y" && "$OVERWRITE"!="N"
+   if [ "$OVERWRITE" == "Y" ]; then
+      rm -f "$PRIVATE_KEY_FILE"
+      if [ -e "$PRIVATE_KEY_FILE" ]; then
+         echo "error deleting; terminating..."
+         exit
+      fi # -e "$PRIVATE_KEY_FILE"
+      openssl genrsa -out "$PRIVATE_KEY_FILE" $RSA_KEY_LENGTH
+   fi # "$OVERWRITE" == "Y"
+else # -e "$PRIVATE_KEY_FILE"
+     openssl genrsa -out "$PRIVATE_KEY_FILE" $RSA_KEY_LENGTH
+fi
+
+if [ -e "$CERT_CHAIN_FILE" ]; then
+   OVERWRITE=""
+   while [[ "$OVERWRITE" != "Y" && "$OVERWRITE" != "N" ]]; do
+         read -p "\"$CERT_CHAIN_FILE\" already exists; overwrite? (Y/[N])" \
+              OVERWRITE
+         OVERWRITE=$(echo "$OVERWRITE"|tr '[:lower:]' '[:upper:]')
+   done # while "$OVERWRITE" != "Y" && "$OVERWRITE"!="N"
+   if [ "$OVERWRITE" == "Y" ]; then
+      rm -f "$CERT_CHAIN_FILE"
+      if [ -e "$CERT_CHAIN_FILE" ]; then
+         echo "error deleting; terminating..."
+         exit
+      fi
+      openssl req -new -x509 -nodes -sha1 -days $LIFETIME_DAYS \
+              -key "$PRIVATE_KEY_FILE" > "$CERT_CHAIN_FILE"
+   fi # "$OVERWRITE" == "Y"
+else # -e "$CERT_CHAIN_FILE"
+     openssl req -new -x509 -nodes -sha1 -days $LIFETIME_DAYS \
+             -key "$PRIVATE_KEY_FILE" > "$CERT_CHAIN_FILE"
+fi
